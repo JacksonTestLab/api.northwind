@@ -1,7 +1,7 @@
-import { test, expect } from '../../fixtures/auth.fixture';
+import { randomUUID } from 'node:crypto';
+import { test as baseTest, expect } from '../../fixtures/auth.fixture';
 import dadosCadastro from '../../data/json/products/produtos_dados_cadastro.json';
 import dadosExclusao from '../../data/json/products/produtos_dados_exclusao.json';
-import dadosEspecificos from '../../data/json/products/produtos_dados_especificos.json';
 import daosAtualizacao from '../../data/json/products/produtos_dados_atualizacao.json';
 import dadosFiltros from '../../data/json/products/produtos_dados_filtros.json';
 import dadosMidia from '../../data/json/products/produtos_dados_midia.json';
@@ -17,6 +17,34 @@ import { listarProdutos } from '../../services/product.service';
 import { criarProduto } from '../../services/product.service';
 import { allure } from 'allure-playwright';
 import fs from 'fs';
+
+const test = baseTest.extend<{ temporaryProductId: number }>({
+    temporaryProductId: async ({ request, authToken }, use) => {
+        const uniqueId = randomUUID();
+        const createResponse = await criarProduto(request, authToken, {
+            name: `Produto Playwright ${uniqueId}`,
+            price: 99,
+            stock_quantity: 3,
+            sku: `PW-${uniqueId}`,
+            category_id: 10,
+            supplier_id: 10
+        });
+        const createBody: { data?: { id?: unknown } } = await createResponse.json();
+
+        expect(createResponse.status()).toBe(201);
+        if (typeof createBody.data?.id !== 'number') {
+            throw new Error('Product creation response did not contain a numeric ID.');
+        }
+
+        const productId = createBody.data.id;
+        await use(productId);
+
+        const deleteResponse = await request.delete(`products/${productId}`, {
+            headers: { Authorization: `Bearer ${authToken}` }
+        });
+        expect(deleteResponse.status()).toBe(200);
+    }
+});
 
 
 test.describe('Gestão de Catálogo de Produtos', () => {
@@ -176,20 +204,17 @@ test.describe('Gestão de Catálogo de Produtos', () => {
         });
         test('Deve permitir a ordenação de produtos por múltiplos campos (nome, preço, estoque)', async ({ request, authToken }) => {
         });
-        test('Deve validar aninhamento de categorias e fornecedores', async ({ request, authToken }) => {
-
-            const cenario = dadosEspecificos.produto_existente
-
-            const response = await request.get(`products/${cenario.dados.id}`, {
+        test('Deve validar aninhamento de categorias e fornecedores', async ({ request, authToken, temporaryProductId }) => {
+            const response = await request.get(`products/${temporaryProductId}`, {
                 headers: { Authorization: `Bearer ${authToken}` }
             })
 
-            expect(response.status()).toBe(cenario.esperado.status)
+            expect(response.status()).toBe(200)
 
             const body = await response.json()
 
             // mensagem de sucesso
-            expect(body.mensagens).toContain(cenario.esperado.mensagem)
+            expect(body.mensagens).toContain('Produto carregado com sucesso.')
 
             // campos principais
             expect(body.data).toHaveProperty('id')
@@ -212,20 +237,17 @@ test.describe('Gestão de Catálogo de Produtos', () => {
 
 
         });
-        test('Deve validar um produto conhecido de uma lista existente', async ({ request, authToken }) => {
-
-            const cenario = dadosEspecificos.produto_existente
-
-            const response = await request.get(`products/${cenario.dados.id}`, {
+        test('Deve validar um produto conhecido de uma lista existente', async ({ request, authToken, temporaryProductId }) => {
+            const response = await request.get(`products/${temporaryProductId}`, {
                 headers: { Authorization: `Bearer ${authToken}` }
             })
 
-            expect(response.status()).toBe(cenario.esperado.status)
+            expect(response.status()).toBe(200)
 
             const body = await response.json()
 
             // mensagem de sucesso
-            expect(body.mensagens).toContain(cenario.esperado.mensagem)
+            expect(body.mensagens).toContain('Produto carregado com sucesso.')
 
             // campos principais
             expect(body.data).toHaveProperty('id')
@@ -252,17 +274,17 @@ test.describe('Gestão de Catálogo de Produtos', () => {
     });
 
     test.describe('Atualização de Produtos ', () => {
-        test('Deve garantir a atualização total dos dados de um produto existente', async ({ request, authToken }) => {
-            const productId = 357;
+        test('Deve garantir a atualização total dos dados de um produto existente', async ({ request, authToken, temporaryProductId }) => {
+            const productId = temporaryProductId;
             const response = await request.put(`products/${productId}`, {
                 headers: {
                     Authorization: `Bearer ${authToken}`
                 },
                 data: {
-                    name: 'Produto Via Playwright',
+                    name: `Produto Via Playwright ${productId}`,
                     price: 1000,
                     stock_quantity: 1000,
-                    sku: 'NOV-098',
+                    sku: `NOV-${productId}`,
                     category_id: 10,
                     supplier_id: 10
                 }
@@ -272,7 +294,7 @@ test.describe('Gestão de Catálogo de Produtos', () => {
 
             expect(response.status()).toBe(200);
             // Garante que o nome que você enviou é o que a API salvou e retornou
-            expect(body.data.name).toBe('Produto Via Playwright');
+            expect(body.data.name).toBe(`Produto Via Playwright ${productId}`);
             expect(body.data.price).toBe(1000);
             // Valida se a mensagem de sucesso está presente e correta
             expect(body.mensagens[0]).toBe('Produto atualizado com sucesso!');
@@ -283,10 +305,8 @@ test.describe('Gestão de Catálogo de Produtos', () => {
 
 
         })
-        test('Deve permitir a atualização parcial de campos específicos', async ({ request, authToken }) => {
-
-            const productId = 363;
-
+        test('Deve permitir a atualização parcial de campos específicos', async ({ request, authToken, temporaryProductId }) => {
+            const productId = temporaryProductId;
             const response = await request.patch(`products/${productId}`, {
                 headers: {
                     Authorization: `Bearer ${authToken}`
@@ -453,7 +473,7 @@ test.describe('Gestão de Catálogo de Produtos', () => {
             for (let i = 0; i < body.data.length - 1; i++) {
                 const atual = body.data[i].name
                 const proximo = body.data[i + 1].name
-                expect(atual <= proximo).toBeTruthy()
+                expect(atual.localeCompare(proximo, undefined, { sensitivity: 'base' })).toBeLessThanOrEqual(0)
             }
 
 
@@ -464,11 +484,11 @@ test.describe('Gestão de Catálogo de Produtos', () => {
 
     test.describe('Gerenciamento de Mídia', () => {
 
-        test('Deve realizar upload de imagem PNG com sucesso com buffer', async ({ request, authToken }) => {
+        test('Deve realizar upload de imagem PNG com sucesso com buffer', async ({ request, authToken, temporaryProductId }) => {
             // Gerando um "falso" PNG minúsculo na memória usando Buffer (Magic Bytes do PNG)
             const dummyPngBuffer = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082', 'hex');
 
-            const response = await request.post('products/363/image', {
+            const response = await request.post(`products/${temporaryProductId}/image`, {
                 headers: { Authorization: `Bearer ${authToken}` },
                 // O Segredo do Upload no Playwright está aqui:
                 multipart: {
@@ -483,10 +503,10 @@ test.describe('Gestão de Catálogo de Produtos', () => {
             // Usando o seu validador customizado:
             validarStatusEMensagem(response, body, { status: 200, mensagem: 'Upload da imagem realizado com sucesso!' });
         });
-        test('Deve rejeitar upload de imagem com formato inválido (JPG) com buffer', async ({ request, authToken }) => {
+        test('Deve rejeitar upload de imagem com formato inválido (JPG) com buffer', async ({ request, authToken, temporaryProductId }) => {
             // Criando um arquivo JPG falso
             const dummyJpgBuffer = Buffer.from('ffd8ffe000104a46494600010101004800480000ffdb0043', 'hex');
-            const response = await request.post('products/305/image', {
+            const response = await request.post(`products/${temporaryProductId}/image`, {
                 headers: { Authorization: `Bearer ${authToken}` },
                 multipart: {
                     file: {
@@ -499,11 +519,11 @@ test.describe('Gestão de Catálogo de Produtos', () => {
             const body = await response.json();
             validarStatusEMensagem(response, body, { status: 400, mensagem: 'Apenas arquivos PNG são permitidos para imagem do produto.' });
         });
-        test('Deve rejeitar upload de imagem maior que 2MB usando arquivo real AnexoG.png', async ({ request, authToken }) => {
+        test('Deve rejeitar upload de imagem maior que 2MB usando arquivo real AnexoG.png', async ({ request, authToken, temporaryProductId }) => {
             const caminhoImagem = './assets/AnexoG.png';
             const bufferArquivo = fs.readFileSync(caminhoImagem);
 
-            const response = await request.post('products/363/image', {
+            const response = await request.post(`products/${temporaryProductId}/image`, {
                 headers: { Authorization: `Bearer ${authToken}` },
                 multipart: {
                     file: {
@@ -518,10 +538,10 @@ test.describe('Gestão de Catálogo de Produtos', () => {
             expect(response.status()).toBe(400);
             expect(body.mensagens[0]).toContain('Arquivo muito grande. Tamanho máximo permitido: 2MB');
         });
-        test('Deve realizar upload de manual PDF com sucesso', async ({ request, authToken }) => {
+        test('Deve realizar upload de manual PDF com sucesso', async ({ request, authToken, temporaryProductId }) => {
             // Simulando a estrutura básica de um PDF em texto
             const dummyPdfBuffer = Buffer.from('%PDF-1.4\n1 0 obj\n<<\n/Title (Dummy PDF)\n>>\nendobj\n', 'utf-8');
-            const response = await request.post('products/363/pdf', {
+            const response = await request.post(`products/${temporaryProductId}/pdf`, {
                 headers: { Authorization: `Bearer ${authToken}` },
                 multipart: {
                     file: {
@@ -534,10 +554,10 @@ test.describe('Gestão de Catálogo de Produtos', () => {
             const body = await response.json();
             validarStatusEMensagem(response, body, { status: 200, mensagem: 'Upload do PDF realizado com sucesso!' });
         });
-        test('Deve rejeitar upload de documento com extensão inválida (TXT)', async ({ request, authToken }) => {
+        test('Deve rejeitar upload de documento com extensão inválida (TXT)', async ({ request, authToken, temporaryProductId }) => {
             const caminhoTxt = './assets/Anexo.txt';
             const arquivoTxt = fs.readFileSync(caminhoTxt);
-            const response = await request.post('products/363/pdf', {
+            const response = await request.post(`products/${temporaryProductId}/pdf`, {
                 headers: { Authorization: `Bearer ${authToken}` },
                 multipart: {
                     file: {
@@ -557,11 +577,11 @@ test.describe('Gestão de Catálogo de Produtos', () => {
          // ==========================================
         // TESTES DE UPLOAD DE IMAGEM (PNG)
         // ==========================================
-        test('Deve realizar upload de imagem PNG com sucesso usando arquivo real', async ({ request, authToken }) => {
+        test('Deve realizar upload de imagem PNG com sucesso usando arquivo real', async ({ request, authToken, temporaryProductId }) => {
             const caminhoImagem = 'assets/pipeline.PNG';
             const arquivoFisico = fs.readFileSync(caminhoImagem);
 
-            const response = await request.post('products/363/image', {
+            const response = await request.post(`products/${temporaryProductId}/image`, {
                 headers: { Authorization: `Bearer ${authToken}` },
                 multipart: {
                     file: {
@@ -583,11 +603,11 @@ test.describe('Gestão de Catálogo de Produtos', () => {
         // ==========================================
         // TESTES DE UPLOAD DE PDF
         // ==========================================
-        test('Deve realizar upload de manual PDF com sucesso usando arquivo real', async ({ request, authToken }) => {
+        test('Deve realizar upload de manual PDF com sucesso usando arquivo real', async ({ request, authToken, temporaryProductId }) => {
             const caminhoPDF = 'assets/calculo.pdf';
             const arquivoFisico = fs.readFileSync(caminhoPDF);
 
-            const response = await request.post('products/363/pdf', {
+            const response = await request.post(`products/${temporaryProductId}/pdf`, {
                 headers: { Authorization: `Bearer ${authToken}` },
                 multipart: {
                     file: {
