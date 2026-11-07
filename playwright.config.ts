@@ -1,3 +1,4 @@
+
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
@@ -6,14 +7,18 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  //reporter: 'html',
+
   reporter: [
     ['list'],
     ['allure-playwright', {
       detail: true,
-    }]
-    /*['html', {   open: 'never'   }]*/
+    }],
+    ['html', {
+      outputFolder: 'playwright-report',
+      open: 'never',
+    }],
   ],
+
   use: {
     baseURL: 'https://northwind-test-platform.vercel.app/api/v1/',
     extraHTTPHeaders: {

@@ -1,33 +1,36 @@
 {
-  "name": "api.northwind",
+  "name": "api-northwind",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "playwright test",
-    "test:list": "playwright test --list",
-    "typecheck": "tsc --noEmit"
+    "test:clean": "npx rimraf allure-results",
+    "test:run": "npm run test:clean && npx playwright test",
+    "report:gen": "npx allure generate allure-results --clean -o allure-report",
+    "report:open": "npx allure open allure-report",
+    "test:full": "npm run test:run || npm run report:gen && npm run report:open"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JacksonTestLab/api.northwind.git"
+    "url": "git+https://github.com/cursosgotasdetecnologia/api-northwind.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/JacksonTestLab/api.northwind/issues"
+    "url": "https://github.com/cursosgotasdetecnologia/api-northwind/issues"
   },
-  "homepage": "https://github.com/JacksonTestLab/api.northwind#readme",
+  "homepage": "https://github.com/cursosgotasdetecnologia/api-northwind#readme",
   "devDependencies": {
-    "@faker-js/faker": "^10.6.0",
-    "@playwright/test": "^1.64.1",
-    "@types/node": "^26.6.6",
-    "allure-playwright": "^3.14.0",
-    "typescript": "^7.0.2"
+    "@faker-js/faker": "^10.4.0",
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^25.5.2",
+    "allure-commandline": "^2.38.1",
+    "allure-js-commons": "^3.7.1",
+    "allure-playwright": "^3.7.1"
   },
   "dependencies": {
-    "dotenv": "^18.0.9"
+    "dotenv": "^17.4.2"
   }
 }
